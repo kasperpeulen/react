@@ -192,6 +192,60 @@ describe('ReactConfigurableErrorLogging', () => {
     }).toThrow('onCaughtError error');
   });
 
+  it('describes the component stack of a caught error only when it is read', async () => {
+    class ErrorBoundary extends React.Component {
+      state = {error: null};
+      static getDerivedStateFromError(error) {
+        return {error};
+      }
+      render() {
+        return this.state.error ? null : this.props.children;
+      }
+    }
+    // Describing a function component's frame calls it without props.
+    let describedParent = 0;
+    function Parent(props) {
+      if (props === undefined) {
+        describedParent++;
+      }
+      return props.children;
+    }
+    function ErrorThrowingComponent() {
+      throw new Error('render error');
+    }
+
+    const caughtErrors = [];
+    const root = ReactDOMClient.createRoot(container, {
+      onCaughtError(error, errorInfo) {
+        caughtErrors.push(error, errorInfo);
+      },
+    });
+
+    await fakeAct(() => {
+      root.render(
+        <ErrorBoundary>
+          <Parent>
+            <ErrorThrowingComponent />
+          </Parent>
+        </ErrorBoundary>,
+      );
+    });
+
+    expect(caughtErrors.length).toBe(2);
+    expect(describedParent).toBe(0);
+
+    const errorInfo = caughtErrors[1];
+    expect(errorInfo.componentStack).toMatch(
+      new RegExp(
+        '\\s+(in|at) ErrorThrowingComponent(.*)\n' +
+          '\\s+(in|at) Parent(.*)\n' +
+          '\\s+(in|at) ErrorBoundary(.*)',
+      ),
+    );
+    expect(errorInfo.componentStack).toBe(errorInfo.componentStack);
+    expect(describedParent).toBe(1);
+  });
+
   it('does not log errors when inside real act', async () => {
     function ErrorThrowingComponent() {
       throw new Error('render error');

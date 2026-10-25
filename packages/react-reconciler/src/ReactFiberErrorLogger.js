@@ -10,6 +10,8 @@
 import type {Fiber, FiberRoot} from './ReactInternalTypes';
 import type {CapturedValue} from './ReactCapturedValue';
 
+import {getCapturedStack} from './ReactCapturedValue';
+
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
 
 import {ClassComponent} from './ReactWorkTags';
@@ -147,7 +149,9 @@ export function logUncaughtError(
     }
     const onUncaughtError = root.onUncaughtError;
     onUncaughtError(error, {
-      componentStack: errorInfo.stack,
+      get componentStack() {
+        return getCapturedStack(errorInfo);
+      },
     });
   } catch (e) {
     // This method must not throw, or React internal state will get messed up.
@@ -175,7 +179,9 @@ export function logCaughtError(
     const error = errorInfo.value as any;
     const onCaughtError = root.onCaughtError;
     onCaughtError(error, {
-      componentStack: errorInfo.stack,
+      get componentStack() {
+        return getCapturedStack(errorInfo);
+      },
       errorBoundary:
         boundary.tag === ClassComponent
           ? boundary.stateNode // This should always be the case as long as we only have class boundaries
