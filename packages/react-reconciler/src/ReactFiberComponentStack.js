@@ -119,13 +119,15 @@ export function describeStackFrames(frames: ComponentStackFrames): string {
     let info = '';
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
-      info += isArray(frame)
-        ? describeFrame(frame[0], frame[1], frame[2])
-        : describeDebugInfoFrame(
-            frame.name as any,
-            frame.env,
-            frame.debugLocation,
-          );
+      if (isArray(frame)) {
+        info += describeFrame(frame[0], frame[1], frame[2]);
+      } else if (__DEV__) {
+        info += describeDebugInfoFrame(
+          frame.name as any,
+          frame.env,
+          frame.debugLocation,
+        );
+      }
     }
     return info;
   } catch (x) {

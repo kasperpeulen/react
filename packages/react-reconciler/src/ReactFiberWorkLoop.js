@@ -275,7 +275,7 @@ import {
 import {DefaultAsyncDispatcher} from './ReactFiberAsyncDispatcher';
 import {
   createCapturedValueAtFiber,
-  getCapturedStack,
+  withLazyComponentStack,
   type CapturedValue,
 } from './ReactCapturedValue';
 import {
@@ -4629,11 +4629,11 @@ function flushGestureAnimations(): void {
 }
 
 function makeErrorInfo(captured: null | CapturedValue<mixed>) {
-  const errorInfo = {
-    get componentStack() {
-      return captured === null ? null : getCapturedStack(captured);
-    },
-  };
+  const errorInfo = withLazyComponentStack(
+    {componentStack: null as ?string},
+    captured,
+    null,
+  );
   if (__DEV__) {
     Object.defineProperty(errorInfo as any, 'digest', {
       get() {

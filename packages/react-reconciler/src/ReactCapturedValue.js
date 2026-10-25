@@ -25,7 +25,7 @@ export type CapturedValue<+T> = {
   // The component stack is described on first read: most caught errors are
   // never logged with their stack, and describing it calls every component in
   // it. Read it with getCapturedStack().
-  stack: string | null,
+  describedStack: string | null,
   frames: ComponentStackFrames | null,
 };
 
@@ -44,7 +44,7 @@ export function createCapturedValueAtFiber<T>(
     const captured: CapturedValue<T> = {
       value,
       source,
-      stack: null,
+      describedStack: null,
       frames: getStackFramesByFiber(source),
     };
     CapturedStacks.set(value, captured);
@@ -53,7 +53,7 @@ export function createCapturedValueAtFiber<T>(
     return {
       value,
       source,
-      stack: null,
+      describedStack: null,
       frames: getStackFramesByFiber(source),
     };
   }
@@ -66,7 +66,7 @@ export function createCapturedValueFromError(
   const captured: CapturedValue<Error> = {
     value,
     source: null,
-    stack: stack,
+    describedStack: stack,
     frames: null,
   };
   if (typeof stack === 'string') {
@@ -86,10 +86,43 @@ export function getCapturedStack(
     const previousDispatcher = ReactSharedInternals.H;
     ReactSharedInternals.H = null;
     try {
-      captured.stack = describeStackFrames(frames);
+      captured.describedStack = describeStackFrames(frames);
     } finally {
       ReactSharedInternals.H = previousDispatcher;
     }
   }
-  return captured.stack;
+  return captured.describedStack;
+}
+
+// Makes errorInfo.componentStack describe the captured stack on first read.
+// The first read or a write turns it into a plain data property, so a logged
+// errorInfo shows the stack and does not keep the captured value alive.
+export function withLazyComponentStack<T: {componentStack: ?string, ...}>(
+  errorInfo: T,
+  captured: null | CapturedValue<mixed>,
+  emptyStack: null | string,
+): T {
+  Object.defineProperty(errorInfo, 'componentStack', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      const stack = captured === null ? null : getCapturedStack(captured);
+      const componentStack = stack !== null ? stack : emptyStack;
+      setComponentStack(errorInfo, componentStack);
+      return componentStack;
+    },
+    set(componentStack: ?string) {
+      setComponentStack(errorInfo, componentStack);
+    },
+  });
+  return errorInfo;
+}
+
+function setComponentStack(errorInfo: Object, componentStack: ?string): void {
+  Object.defineProperty(errorInfo, 'componentStack', {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: componentStack,
+  });
 }

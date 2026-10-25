@@ -49,7 +49,7 @@ import {
 } from 'shared/ReactFeatureFlags';
 import {
   createCapturedValueAtFiber,
-  getCapturedStack,
+  withLazyComponentStack,
 } from './ReactCapturedValue';
 import {
   enqueueCapturedUpdate,
@@ -180,12 +180,10 @@ function initializeClassErrorUpdate(
         callComponentDidCatchInDEV(this, errorInfo);
       } else {
         const error = errorInfo.value;
-        this.componentDidCatch(error, {
-          get componentStack() {
-            const stack = getCapturedStack(errorInfo);
-            return stack !== null ? stack : '';
-          },
-        });
+        this.componentDidCatch(
+          error,
+          withLazyComponentStack({componentStack: ''}, errorInfo, ''),
+        );
       }
       if (__DEV__) {
         if (typeof getDerivedStateFromError !== 'function') {
