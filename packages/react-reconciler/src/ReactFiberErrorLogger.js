@@ -10,6 +10,8 @@
 import type {Fiber, FiberRoot} from './ReactInternalTypes';
 import type {CapturedValue} from './ReactCapturedValue';
 
+import {withLazyComponentStack} from './ReactCapturedValue';
+
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
 
 import {ClassComponent} from './ReactWorkTags';
@@ -146,9 +148,10 @@ export function logUncaughtError(
       return;
     }
     const onUncaughtError = root.onUncaughtError;
-    onUncaughtError(error, {
-      componentStack: errorInfo.stack,
-    });
+    onUncaughtError(
+      error,
+      withLazyComponentStack({componentStack: null}, errorInfo, null),
+    );
   } catch (e) {
     // This method must not throw, or React internal state will get messed up.
     // If console.error is overridden, or logCapturedError() shows a dialog that throws,
@@ -174,13 +177,20 @@ export function logCaughtError(
     }
     const error = errorInfo.value as any;
     const onCaughtError = root.onCaughtError;
-    onCaughtError(error, {
-      componentStack: errorInfo.stack,
-      errorBoundary:
-        boundary.tag === ClassComponent
-          ? boundary.stateNode // This should always be the case as long as we only have class boundaries
-          : null,
-    });
+    onCaughtError(
+      error,
+      withLazyComponentStack(
+        {
+          componentStack: null,
+          errorBoundary:
+            boundary.tag === ClassComponent
+              ? boundary.stateNode // This should always be the case as long as we only have class boundaries
+              : null,
+        },
+        errorInfo,
+        null,
+      ),
+    );
   } catch (e) {
     // This method must not throw, or React internal state will get messed up.
     // If console.error is overridden, or logCapturedError() shows a dialog that throws,

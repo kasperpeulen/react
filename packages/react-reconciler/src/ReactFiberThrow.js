@@ -47,7 +47,10 @@ import {
   enableUpdaterTracking,
   disableLegacyMode,
 } from 'shared/ReactFeatureFlags';
-import {createCapturedValueAtFiber} from './ReactCapturedValue';
+import {
+  createCapturedValueAtFiber,
+  withLazyComponentStack,
+} from './ReactCapturedValue';
 import {
   enqueueCapturedUpdate,
   createUpdate,
@@ -177,10 +180,10 @@ function initializeClassErrorUpdate(
         callComponentDidCatchInDEV(this, errorInfo);
       } else {
         const error = errorInfo.value;
-        const stack = errorInfo.stack;
-        this.componentDidCatch(error, {
-          componentStack: stack !== null ? stack : '',
-        });
+        this.componentDidCatch(
+          error,
+          withLazyComponentStack({componentStack: ''}, errorInfo, ''),
+        );
       }
       if (__DEV__) {
         if (typeof getDerivedStateFromError !== 'function') {

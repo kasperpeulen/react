@@ -275,6 +275,7 @@ import {
 import {DefaultAsyncDispatcher} from './ReactFiberAsyncDispatcher';
 import {
   createCapturedValueAtFiber,
+  withLazyComponentStack,
   type CapturedValue,
 } from './ReactCapturedValue';
 import {
@@ -4278,7 +4279,7 @@ function flushSpawnedWork(): void {
       const onRecoverableError = root.onRecoverableError;
       for (let i = 0; i < recoverableErrors.length; i++) {
         const recoverableError = recoverableErrors[i];
-        const errorInfo = makeErrorInfo(recoverableError.stack);
+        const errorInfo = makeErrorInfo(recoverableError);
         if (__DEV__) {
           runWithFiberInDEV(
             recoverableError.source,
@@ -4627,10 +4628,12 @@ function flushGestureAnimations(): void {
   ensureRootIsScheduled(root);
 }
 
-function makeErrorInfo(componentStack: ?string) {
-  const errorInfo = {
-    componentStack,
-  };
+function makeErrorInfo(captured: null | CapturedValue<mixed>) {
+  const errorInfo = withLazyComponentStack(
+    {componentStack: null as ?string},
+    captured,
+    null,
+  );
   if (__DEV__) {
     Object.defineProperty(errorInfo as any, 'digest', {
       get() {

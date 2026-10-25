@@ -12,6 +12,8 @@ import type {LazyComponent} from 'react/src/ReactLazy';
 import type {Effect} from './ReactFiberHooks';
 import type {CapturedValue} from './ReactCapturedValue';
 
+import {withLazyComponentStack} from './ReactCapturedValue';
+
 import {isRendering, setIsRendering} from './ReactCurrentFiber';
 import {captureCommitPhaseError} from './ReactFiberWorkLoop';
 
@@ -133,10 +135,10 @@ const callComponentDidCatch = {
     errorInfo: CapturedValue<mixed>,
   ): void {
     const error = errorInfo.value;
-    const stack = errorInfo.stack;
-    instance.componentDidCatch(error, {
-      componentStack: stack !== null ? stack : '',
-    });
+    instance.componentDidCatch(
+      error,
+      withLazyComponentStack({componentStack: ''}, errorInfo, ''),
+    );
   },
 };
 

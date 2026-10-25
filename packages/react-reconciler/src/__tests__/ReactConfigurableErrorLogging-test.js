@@ -192,6 +192,125 @@ describe('ReactConfigurableErrorLogging', () => {
     }).toThrow('onCaughtError error');
   });
 
+  it('describes the component stack of a caught error only when it is read', async () => {
+    class ErrorBoundary extends React.Component {
+      state = {error: null};
+      static getDerivedStateFromError(error) {
+        return {error};
+      }
+      render() {
+        return this.state.error ? null : this.props.children;
+      }
+    }
+    // Describing a function component's frame calls it without props.
+    let describedParent = 0;
+    function Parent(props) {
+      if (props === undefined) {
+        describedParent++;
+      }
+      return props.children;
+    }
+    function ErrorThrowingComponent() {
+      throw new Error('render error');
+    }
+
+    const caughtErrors = [];
+    const root = ReactDOMClient.createRoot(container, {
+      onCaughtError(error, errorInfo) {
+        caughtErrors.push(error, errorInfo);
+      },
+    });
+
+    await fakeAct(() => {
+      root.render(
+        <ErrorBoundary>
+          <Parent>
+            <ErrorThrowingComponent />
+          </Parent>
+        </ErrorBoundary>,
+      );
+    });
+
+    expect(caughtErrors.length).toBe(2);
+    expect(describedParent).toBe(0);
+
+    const errorInfo = caughtErrors[1];
+    expect(errorInfo.componentStack).toMatch(
+      new RegExp(
+        '\\s+(in|at) ErrorThrowingComponent(.*)\n' +
+          '\\s+(in|at) Parent(.*)\n' +
+          '\\s+(in|at) ErrorBoundary(.*)',
+      ),
+    );
+    expect(describedParent).toBe(1);
+    // The first read turned it into a plain, writable data property.
+    expect(
+      Object.getOwnPropertyDescriptor(errorInfo, 'componentStack'),
+    ).toEqual(
+      expect.objectContaining({value: expect.any(String), writable: true}),
+    );
+    errorInfo.componentStack = 'replaced';
+    expect(errorInfo.componentStack).toBe('replaced');
+    expect(describedParent).toBe(1);
+  });
+
+  it('describes a caught component stack read during a render without reaching its hooks', async () => {
+    class ErrorBoundary extends React.Component {
+      state = {error: null};
+      static getDerivedStateFromError(error) {
+        return {error};
+      }
+      render() {
+        return this.state.error ? null : this.props.children;
+      }
+    }
+    function Parent(props) {
+      React.useState('x');
+      return props.children;
+    }
+    function ErrorThrowingComponent() {
+      throw new Error('render error');
+    }
+
+    let caughtInfo = null;
+    const root = ReactDOMClient.createRoot(container, {
+      onCaughtError(error, errorInfo) {
+        caughtInfo = errorInfo;
+      },
+    });
+    await fakeAct(() => {
+      root.render(
+        <ErrorBoundary>
+          <Parent>
+            <ErrorThrowingComponent />
+          </Parent>
+        </ErrorBoundary>,
+      );
+    });
+
+    let setFirst;
+    let stack;
+    function Reader() {
+      const [first, setState] = React.useState('a');
+      setFirst = setState;
+      stack = caughtInfo.componentStack;
+      const [second] = React.useState('t');
+      return first + second;
+    }
+    const readerContainer = document.createElement('div');
+    const readerRoot = ReactDOMClient.createRoot(readerContainer);
+    await fakeAct(() => {
+      readerRoot.render(<Reader />);
+    });
+    expect(stack).toMatch(/\s+(in|at) Parent/);
+    expect(readerContainer.textContent).toBe('at');
+
+    await fakeAct(() => {
+      setFirst('b');
+    });
+    expect(readerContainer.textContent).toBe('bt');
+  });
+
   it('does not log errors when inside real act', async () => {
     function ErrorThrowingComponent() {
       throw new Error('render error');

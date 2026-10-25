@@ -33,18 +33,23 @@ import {
   describeDebugInfoFrame,
 } from 'shared/ReactComponentStackFrame';
 import {formatOwnerStack} from 'shared/ReactOwnerStackFrames';
+import isArray from 'shared/isArray';
 
-function describeFiber(fiber: Fiber, childFiber: null | Fiber): string {
-  switch (fiber.tag) {
+function describeFrame(
+  tag: Fiber['tag'],
+  type: Fiber['type'],
+  inSuspenseFallback: boolean,
+): string {
+  switch (tag) {
     case HostHoistable:
     case HostSingleton:
     case HostComponent:
-      return describeBuiltInComponentFrame(fiber.type);
+      return describeBuiltInComponentFrame(type);
     case LazyComponent:
       // TODO: When we support Thenables as component types we should rename this.
       return describeBuiltInComponentFrame('Lazy');
     case SuspenseComponent:
-      if (fiber.child !== childFiber && childFiber !== null) {
+      if (inSuspenseFallback) {
         // If we came from the second Fiber then we're in the Suspense Fallback.
         return describeBuiltInComponentFrame('Suspense Fallback');
       }
@@ -53,11 +58,11 @@ function describeFiber(fiber: Fiber, childFiber: null | Fiber): string {
       return describeBuiltInComponentFrame('SuspenseList');
     case FunctionComponent:
     case SimpleMemoComponent:
-      return describeFunctionComponentFrame(fiber.type);
+      return describeFunctionComponentFrame(type);
     case ForwardRef:
-      return describeFunctionComponentFrame(fiber.type.render);
+      return describeFunctionComponentFrame(type.render);
     case ClassComponent:
-      return describeClassComponentFrame(fiber.type);
+      return describeClassComponentFrame(type);
     case ActivityComponent:
       return describeBuiltInComponentFrame('Activity');
     case ViewTransitionComponent:
@@ -70,37 +75,68 @@ function describeFiber(fiber: Fiber, childFiber: null | Fiber): string {
   }
 }
 
-export function getStackByFiberInDevAndProd(workInProgress: Fiber): string {
-  try {
-    let info = '';
-    let node: Fiber = workInProgress;
-    let previous: null | Fiber = null;
-    do {
-      info += describeFiber(node, previous);
-      if (__DEV__) {
-        // Add any Server Component stack frames in reverse order.
-        const debugInfo = node._debugInfo;
-        if (debugInfo) {
-          for (let i = debugInfo.length - 1; i >= 0; i--) {
-            const entry = debugInfo[i];
-            if (typeof entry.name === 'string') {
-              info += describeDebugInfoFrame(
-                entry.name,
-                entry.env,
-                entry.debugLocation,
-              );
-            }
+// The ancestors of a fiber, recorded without describing them. Describing a
+// function or class component calls it to read a native stack frame, which is
+// the costly part of a component stack, so a caller that may never read the
+// stack records the frames and describes them later.
+export opaque type ComponentStackFrames = Array<
+  [Fiber['tag'], Fiber['type'], boolean] | ReactComponentInfo,
+>;
+
+export function getStackFramesByFiber(
+  workInProgress: Fiber,
+): ComponentStackFrames {
+  const frames: ComponentStackFrames = [];
+  let node: Fiber = workInProgress;
+  let previous: null | Fiber = null;
+  do {
+    frames.push([
+      node.tag,
+      node.type,
+      node.child !== previous && previous !== null,
+    ]);
+    if (__DEV__) {
+      // Add any Server Component stack frames in reverse order.
+      const debugInfo = node._debugInfo;
+      if (debugInfo) {
+        for (let i = debugInfo.length - 1; i >= 0; i--) {
+          const entry = debugInfo[i];
+          if (typeof entry.name === 'string') {
+            frames.push(entry as any);
           }
         }
       }
-      previous = node;
-      // $FlowFixMe[incompatible-type] we bail out when we get a null
-      node = node.return;
-    } while (node);
+    }
+    previous = node;
+    // $FlowFixMe[incompatible-type] we bail out when we get a null
+    node = node.return;
+  } while (node);
+  return frames;
+}
+
+export function describeStackFrames(frames: ComponentStackFrames): string {
+  try {
+    let info = '';
+    for (let i = 0; i < frames.length; i++) {
+      const frame = frames[i];
+      if (isArray(frame)) {
+        info += describeFrame(frame[0], frame[1], frame[2]);
+      } else if (__DEV__) {
+        info += describeDebugInfoFrame(
+          frame.name as any,
+          frame.env,
+          frame.debugLocation,
+        );
+      }
+    }
     return info;
   } catch (x) {
     return '\nError generating stack: ' + x.message + '\n' + x.stack;
   }
+}
+
+export function getStackByFiberInDevAndProd(workInProgress: Fiber): string {
+  return describeStackFrames(getStackFramesByFiber(workInProgress));
 }
 
 function describeFunctionComponentFrameWithoutLineNumber(fn: Function): string {
